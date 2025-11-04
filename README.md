@@ -1,6 +1,6 @@
 # WiFi Deauthentication Wardrive Tool for Raspberry Pi
 
-> **⚠️ DISCLAIMER**: This tool is for educational and authorized testing purposes only. Unauthorized access to computer networks is illegal. Always obtain proper authorization before testing.
+> **WARNING: DISCLAIMER**: This tool is for educational and authorized testing purposes only. Unauthorized access to computer networks is illegal. Always obtain proper authorization before testing.
 
 ## Overview
 
@@ -49,13 +49,20 @@ The system uses a dual-WiFi setup:
 ### Why You Need a Separate WiFi Adapter
 
 The Raspberry Pi's built-in WiFi adapter:
-- ❌ Does NOT support monitor mode reliably
-- ❌ Cannot perform packet injection
-- ❌ Uses proprietary firmware with limited capabilities
+- Does NOT support monitor mode reliably
+- Cannot perform packet injection
+- Uses proprietary firmware with limited capabilities
 
 You need **TWO WiFi interfaces**:
 1. **Built-in WiFi (wlan0)**: Connect to phone hotspot for SSH access
 2. **External USB adapter (wlan1)**: Monitor mode for scanning and attacks
+
+### Tested Hardware
+
+This project has been tested with:
+- **RT5572 chipset** (Panda PAU09 adapter)
+- Alfa AWUS036NH (RTL8187)
+- Other Ralink chipsets (RT3070, RT5370)
 
 ### Software Requirements
 - Raspberry Pi OS (Bookworm or Bullseye)
@@ -74,7 +81,30 @@ sudo apt update
 sudo apt install aircrack-ng python3 python3-pip python3-smbus i2c-tools git
 ```
 
-### 2. Enable I2C (for LCD display)
+### 2. Install WiFi Adapter Firmware (if needed)
+
+For Ralink chipsets (RT5572, RT3070, RT5370) like the Panda PAU09:
+
+```bash
+sudo apt update
+sudo apt install firmware-ralink
+```
+
+After installation, reboot:
+```bash
+sudo reboot
+```
+
+Verify your adapter is detected:
+```bash
+lsusb
+# Should show your WiFi adapter (e.g., "Ralink Technology, Corp.")
+
+iwconfig
+# Should show wlan0 (built-in) and wlan1 (external adapter)
+```
+
+### 3. Enable I2C (for LCD display)
 
 ```bash
 sudo raspi-config
@@ -88,20 +118,20 @@ sudo i2cdetect -y 1
 # Should show 27 or 3F in the grid
 ```
 
-### 3. Install Python Dependencies
+### 4. Install Python Dependencies
 
 ```bash
 pip3 install -r requirements.txt
 # Or manually: pip3 install RPLCD
 ```
 
-### 4. Create Dump Directory
+### 5. Create Dump Directory
 
 ```bash
 mkdir -p /home/pi/dump
 ```
 
-### 5. Configure Hotspot Connection
+### 6. Configure Hotspot Connection
 
 Edit `wpa_supplicant_hotspot.conf` with your phone's hotspot credentials:
 
@@ -114,7 +144,7 @@ Change these values:
 - `psk="myhotspotpassword"` → Your hotspot password
 - `country=il` → Your country code (us, gb, de, etc.)
 
-### 6. Configure Target Network
+### 7. Configure Target Network
 
 Edit `attack.py` to set your target network:
 
@@ -135,7 +165,7 @@ Examples:
 - `target_essid = "Starbucks WiFi"` - Only attack Starbucks
 - `target_essid = None` - Attack strongest signal (any network)
 
-### 7. Setup Automatic Startup
+### 8. Setup Automatic Startup
 
 Configure the Pi to connect to your hotspot on boot:
 
@@ -149,7 +179,7 @@ Add this line:
 @reboot bash /home/pi/startup.sh
 ```
 
-### 8. (Optional) Test LCD Display
+### 9. (Optional) Test LCD Display
 
 If you have an LCD connected, test it:
 
@@ -159,7 +189,7 @@ python3 lcd_display.py
 
 This will run through LCD test patterns.
 
-### 9. (Optional) Change Hostname
+### 10. (Optional) Change Hostname
 
 For easier SSH access without knowing the IP:
 
@@ -277,6 +307,178 @@ If you're targeting a specific network (e.g., "eduroam") and it shows "Not Found
 - The network must have a valid signal (power > -1 dBm)
 - Try scanning manually: `sudo airodump-ng wlan1` to see available networks
 - Set `target_essid = None` to test with any network
+
+## Testing Instructions
+
+### Step-by-Step Testing Process
+
+**1. Verify WiFi Adapter Detection**
+```bash
+# Check USB devices
+lsusb | grep -i ralink
+# Should show: "Ralink Technology, Corp." or similar
+
+# Check wireless interfaces
+iwconfig
+# Should show wlan0 (built-in) and wlan1 (external)
+```
+
+**2. Test Monitor Mode**
+```bash
+# Enable monitor mode
+sudo airmon-ng start wlan1
+
+# Verify monitor mode is active
+iwconfig wlan1
+# Should show "Mode:Monitor"
+
+# Check for monitor interface (might create wlan1mon)
+iwconfig
+```
+
+**3. Test Scanning (Manual)**
+```bash
+# Start airodump-ng to see available networks
+sudo airodump-ng wlan1
+
+# You should see:
+# - BSSID column (MAC addresses)
+# - PWR column (signal strength)
+# - CH column (channels)
+# - ESSID column (network names including "eduroam" if in range)
+
+# Press Ctrl+C to stop
+```
+
+**4. Test LCD (Optional)**
+```bash
+# Check I2C connection
+sudo i2cdetect -y 1
+# Should show "27" or "3F" in the grid
+
+# Run LCD test
+python3 lcd_display.py
+# Should display test messages on LCD
+```
+
+**5. Dry Run Test (without LCD)**
+```bash
+# Run the attack script
+sudo python3 attack.py
+
+# Watch for output:
+# - "airodump-ng process started"
+# - "Getting latest dump file"
+# - "Found target network: eduroam..." (if eduroam in range)
+# - "Deauthing eduroam..."
+
+# Press Ctrl+C to stop after one loop
+```
+
+**6. Check CSV Output**
+```bash
+# View collected AP data
+ls -lh /home/pi/dump/
+cat /home/pi/dump/dump-01.csv
+
+# Should contain columns:
+# BSSID, First time seen, Last time seen, channel, Speed, Privacy, Cipher, Authentication, Power, # beacons, # IV, LAN IP, ID-length, ESSID, Key
+```
+
+**7. Test Target Filtering**
+```bash
+# Edit attack.py to test different modes
+nano attack.py
+
+# Test 1: Target eduroam
+target_essid = "eduroam"
+# Run: sudo python3 attack.py
+# Should only attack eduroam if found
+
+# Test 2: Target any network
+target_essid = None
+# Run: sudo python3 attack.py
+# Should attack strongest signal
+```
+
+### Expected Behavior
+
+**When eduroam is found:**
+```
+=== Attack Loop 1 ===
+Starting airodump-ng scan...
+airodump-ng process started
+Getting latest dump file
+Latest dump: dump-01.csv
+Found target network: eduroam (AA:BB:CC:DD:EE:FF) on channel 36, power -45
+Deauthing eduroam ( AA:BB:CC:DD:EE:FF ) on channel 36 num of packets: 100 ...
+Hopped to channel 36
+Delta time = 0:00:03.123456
+Loop 1 complete
+```
+
+**When eduroam is NOT found:**
+```
+=== Attack Loop 1 ===
+Starting airodump-ng scan...
+airodump-ng process started
+Getting latest dump file
+Latest dump: dump-01.csv
+WARNING: Target network 'eduroam' not found!
+Loop 1 complete
+```
+
+**With LCD connected:**
+- Line 1 shows status: "Scanning", "Searching", "Attacking", "Not Found"
+- Line 2 shows detail: network name, "10 seconds...", etc.
+
+### Troubleshooting Tests
+
+**Test 1: WiFi adapter not recognized**
+```bash
+sudo apt update
+sudo apt install firmware-ralink
+sudo reboot
+lsusb | grep -i ralink
+```
+
+**Test 2: Monitor mode fails**
+```bash
+sudo airmon-ng check kill
+sudo airmon-ng start wlan1
+iwconfig wlan1
+```
+
+**Test 3: No networks detected**
+```bash
+# Test with any network (not just eduroam)
+nano attack.py
+# Change: target_essid = None
+sudo python3 attack.py
+```
+
+**Test 4: Permission denied errors**
+```bash
+# Always run as root
+sudo python3 attack.py
+
+# Check if you're root
+whoami
+# Should output: root
+```
+
+### Verification Checklist
+
+Before deploying:
+- [ ] lsusb shows WiFi adapter
+- [ ] iwconfig shows wlan0 and wlan1
+- [ ] sudo airodump-ng wlan1 shows networks
+- [ ] sudo i2cdetect -y 1 shows LCD (if using LCD)
+- [ ] python3 lcd_display.py works (if using LCD)
+- [ ] /home/pi/dump directory exists
+- [ ] sudo python3 attack.py runs without errors
+- [ ] CSV files created in /home/pi/dump/
+- [ ] Deauth packets sent successfully
 
 ## Legal & Ethical Considerations
 
