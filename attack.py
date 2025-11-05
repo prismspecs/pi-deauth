@@ -434,6 +434,13 @@ airmon_start(iface)
 if LCD_AVAILABLE:
     display_status("Cleaning", "Old Files...")
 
+# Ensure dump directory exists
+if not os.path.exists(dump_dir):
+    print(f"Creating dump directory: {dump_dir}")
+    os.makedirs(dump_dir, exist_ok=True)
+else:
+    print(f"Using dump directory: {dump_dir}")
+
 # Clean up any old CSV files from previous runs
 rm_csv(dump_dir)
 
@@ -463,11 +470,13 @@ while True:
 		
 		# Step 2: Wait for airodump to collect enough data
 		# 10 seconds allows it to scan multiple channels and detect APs
+		print("Waiting 10 seconds for scan...")
 		if LCD_AVAILABLE:
 			display_status("Scanning", "10 seconds...")
 		time.sleep(10)
 		
 		# Step 3: Stop airodump so we can read the CSV file
+		print("Stopping airodump-ng...")
 		if LCD_AVAILABLE:
 			display_status("Stopping", "Scanner...")
 		killall_airodump()
@@ -475,16 +484,27 @@ while True:
 		# Step 4: Find the most recent CSV file created by airodump
 		if LCD_AVAILABLE:
 			display_status("Reading", "Scan Data...")
-		print("Getting latest dump file")
+		print("Getting latest dump file from:", dump_dir)
+		
+		# List files in dump directory for debugging
+		try:
+			files = os.listdir(dump_dir)
+			print(f"Files in {dump_dir}: {files}")
+		except Exception as e:
+			print(f"Error listing directory: {e}")
+		
 		latest_dump_csv_file_name = get_latest_csv(dump_dir, dump_prefix)
 		print("Latest dump:", latest_dump_csv_file_name)
 
 		# Validate that we found a CSV file
 		if(not latest_dump_csv_file_name):
-			print("Latest dump file invalid")
+			print("ERROR: No CSV file found!")
+			print(f"Check that airodump-ng can write to: {dump_dir}")
+			print("Try running manually: sudo airodump-ng wlan1 -w ~/dump/test --output-format csv")
 			if LCD_AVAILABLE:
-				display_status("Error", "No Dump File")
-			exit(1)
+				display_status("Error", "No CSV File")
+			time.sleep(3)
+			continue  # Try again instead of exiting
 
 		# Step 5: Execute deauth attack on the target AP(s)
 		# This reads the CSV, selects target(s), and sends deauth packets
