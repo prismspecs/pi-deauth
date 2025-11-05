@@ -41,8 +41,9 @@ apt install -y \
 
 echo ""
 echo "Step 4: Installing Python dependencies..."
-pip3 install --upgrade pip
-pip3 install -r requirements.txt || pip3 install RPLCD
+# Debian 12+ requires --break-system-packages for pip
+# This is safe for a dedicated single-purpose device
+pip3 install RPLCD --break-system-packages
 
 echo ""
 echo "Step 5: Creating dump directory..."
