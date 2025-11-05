@@ -438,6 +438,18 @@ if LCD_AVAILABLE:
     
 airmon_start(iface)
 
+# Verify monitor mode is actually enabled
+print("Verifying monitor mode...")
+result = subprocess.run(["iwconfig", iface], capture_output=True, text=True)
+if "Mode:Monitor" not in result.stdout:
+    print("ERROR: Interface not in monitor mode!")
+    print("Output:", result.stdout)
+    print("\nTry manually:")
+    print(f"  sudo airmon-ng start {iface}")
+    print(f"  iwconfig {iface}")
+    exit(1)
+print("Monitor mode confirmed")
+
 if LCD_AVAILABLE:
     display_status("Cleaning", "Old Files...")
 
@@ -457,6 +469,36 @@ if LCD_AVAILABLE:
     else:
         display_status("Target Mode", "Strongest AP")
     time.sleep(2)
+
+# Test airodump-ng before starting main loop
+print("\nTesting airodump-ng...")
+test_output = os.path.join(dump_dir, "test")
+test_cmd = ["airodump-ng", iface, "-w", test_output, "--output-format", "csv"]
+print(f"Test command: {' '.join(test_cmd)}")
+
+test_proc = subprocess.Popen(test_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+time.sleep(3)
+test_proc.terminate()
+time.sleep(1)
+
+# Check if test file was created
+test_files = [f for f in os.listdir(dump_dir) if f.startswith("test")]
+if test_files:
+    print(f"SUCCESS: airodump-ng created: {test_files}")
+    # Clean up test files
+    for f in test_files:
+        os.remove(os.path.join(dump_dir, f))
+else:
+    print("ERROR: airodump-ng did not create any files!")
+    print("Checking for errors...")
+    _, stderr = test_proc.communicate()
+    if stderr:
+        print(f"airodump-ng error: {stderr.decode()}")
+    print("\nThis might be because:")
+    print("  1. Interface is not in monitor mode")
+    print("  2. You don't have permission to write to dump directory")
+    print("  3. airodump-ng is not installed correctly")
+    exit(1)
 
 # ============================================================================
 # Main Attack Loop
@@ -534,13 +576,14 @@ while True:
 	except KeyboardInterrupt:
 		# Handle Ctrl+C gracefully
 		print("\n\nStopping attack...")
+		killall_airodump()
 		if LCD_AVAILABLE:
 			stopMarquee()
 			display_status("Stopped", "User Exit")
 			time.sleep(2)
 			clearLCD()
 		print("Stopped by user")
-		exit(1)
+		exit(0)
 	except Exception as e:
 		# Catch any other errors and display them
 		print(f"ERROR in main loop: {e}")
