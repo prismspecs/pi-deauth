@@ -438,17 +438,31 @@ if LCD_AVAILABLE:
     
 airmon_start(iface)
 
-# Verify monitor mode is actually enabled
-print("Verifying monitor mode...")
-result = subprocess.run(["iwconfig", iface], capture_output=True, text=True)
-if "Mode:Monitor" not in result.stdout:
-    print("ERROR: Interface not in monitor mode!")
-    print("Output:", result.stdout)
+# Detect the actual monitor mode interface (might be wlan1mon instead of wlan1)
+print("Detecting monitor mode interface...")
+result = subprocess.run(["iwconfig"], capture_output=True, text=True)
+
+# Check if original interface is in monitor mode
+if "Mode:Monitor" in result.stdout:
+    # Find which interface has monitor mode
+    for line in result.stdout.split('\n'):
+        if "Mode:Monitor" in line:
+            # Extract interface name (first word on the line)
+            monitor_iface = line.split()[0]
+            if monitor_iface != iface:
+                print(f"Monitor interface is: {monitor_iface} (not {iface})")
+                iface = monitor_iface
+            else:
+                print(f"Monitor mode confirmed on: {iface}")
+            break
+else:
+    print("ERROR: No interface in monitor mode found!")
+    print("Available interfaces:")
+    print(result.stdout)
     print("\nTry manually:")
-    print(f"  sudo airmon-ng start {iface}")
-    print(f"  iwconfig {iface}")
+    print(f"  sudo airmon-ng start wlan1")
+    print(f"  iwconfig")
     exit(1)
-print("Monitor mode confirmed")
 
 if LCD_AVAILABLE:
     display_status("Cleaning", "Old Files...")
