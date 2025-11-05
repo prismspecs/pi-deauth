@@ -269,13 +269,30 @@ def airodump(interface, dump_dir, dump_prefix):
 	Returns:
 		None: Starts the process in the background
 	"""
-	# Redirect stdout/stderr to /dev/null to suppress airodump-ng output
-	FNULL = open("/dev/null", "w")
+	# Build the full output path
+	output_path = os.path.join(dump_dir, dump_prefix)
+	
+	# Don't use sudo if we're already root
+	cmd = ["airodump-ng", interface, "-w", output_path, "--output-format", "csv"]
+	
+	print(f"Running: {' '.join(cmd)}")
+	print(f"Output will be: {output_path}-01.csv")
 	
 	# Start airodump-ng as a background process
-	# -w specifies output file path, --output-format csv for machine-readable format
-	subprocess.Popen(["sudo", "airodump-ng", interface, "-w", dump_dir+"/"+dump_prefix, "--output-format", "csv"], stdout=FNULL, stderr=FNULL)
-	print("airodump-ng process started")
+	# Let it output to console for now so we can see errors
+	try:
+		proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		print(f"airodump-ng process started (PID: {proc.pid})")
+		time.sleep(2)  # Give it a moment to start
+		
+		# Check if process is still running
+		if proc.poll() is not None:
+			stdout, stderr = proc.communicate()
+			print("ERROR: airodump-ng exited immediately!")
+			if stderr:
+				print(f"Error: {stderr.decode()}")
+	except Exception as e:
+		print(f"ERROR starting airodump-ng: {e}")
 
 def killall_airodump():
 	"""
