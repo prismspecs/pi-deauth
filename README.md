@@ -74,6 +74,48 @@ This project has been tested with:
 
 ## Installation & Setup
 
+**IMPORTANT: Before installing, ensure you have a compatible WiFi adapter plugged in!**
+
+Your Pi's built-in WiFi cannot do monitor mode. You need an external USB WiFi adapter like:
+- Panda PAU09 (RT5572) - Tested and working
+- Alfa AWUS036NH (RTL8187)
+- Any adapter with RT3070, RT5370, or Atheros AR9271 chipset
+
+### Automated Installation (Recommended)
+
+Run the installation script to install everything automatically:
+
+```bash
+cd /path/to/wifi-deauth-rpi-wardrive
+sudo bash install.sh
+```
+
+This will install:
+- aircrack-ng suite (airodump-ng, aireplay-ng, airmon-ng)
+- Python dependencies (RPLCD for LCD)
+- WiFi adapter firmware (Ralink, Realtek, Atheros)
+- Create dump directory
+- Configure I2C for LCD
+
+After installation:
+```bash
+sudo reboot
+```
+
+Then verify:
+```bash
+# Check for WiFi adapters
+iwconfig
+# Should show wlan0 (built-in) and wlan1 (external adapter)
+
+# Run test
+sudo bash test_setup.sh
+```
+
+### Manual Installation
+
+If you prefer to install manually:
+
 ### 1. Install System Dependencies
 
 ```bash
@@ -81,13 +123,24 @@ sudo apt update
 sudo apt install aircrack-ng python3 python3-pip python3-smbus i2c-tools git
 ```
 
-### 2. Install WiFi Adapter Firmware (if needed)
+### 2. Install WiFi Adapter Firmware
 
 For Ralink chipsets (RT5572, RT3070, RT5370) like the Panda PAU09:
 
 ```bash
-sudo apt update
 sudo apt install firmware-ralink
+```
+
+For Realtek chipsets (RTL8187) like Alfa AWUS036NH:
+
+```bash
+sudo apt install firmware-realtek
+```
+
+For Atheros chipsets:
+
+```bash
+sudo apt install firmware-atheros
 ```
 
 After installation, reboot:
@@ -260,11 +313,15 @@ When the LCD is connected, you'll see real-time status updates:
 |------|---------|
 | `attack.py` | Main attack script - scans, parses, and deauths with LCD support |
 | `lcd_display.py` | LCD control module for 16x2 I2C displays |
+| `install.sh` | Automated installation script - installs all dependencies |
+| `test_setup.sh` | Automated test script to verify hardware and software setup |
 | `startup.sh` | Auto-run on boot - connects to hotspot |
 | `wifi-connect.sh` | Helper script for wpa_supplicant |
 | `wpa_supplicant_hotspot.conf` | WiFi credentials for SSH access |
 | `requirements.txt` | Python dependencies (RPLCD) |
-| `README.md` | This documentation file |
+| `README.md` | Main documentation (this file) |
+| `TESTING.md` | Detailed testing procedures and troubleshooting |
+| `SETUP_GUIDE.md` | Quick setup guide for Raspberry Pi 5 |
 
 ## Troubleshooting
 
@@ -309,6 +366,18 @@ If you're targeting a specific network (e.g., "eduroam") and it shows "Not Found
 - Set `target_essid = None` to test with any network
 
 ## Testing Instructions
+
+### Automated Testing (Recommended)
+
+Run the automated test script to verify your setup:
+
+```bash
+sudo bash test_setup.sh
+```
+
+This will check all hardware, software, and configuration automatically.
+
+For detailed testing procedures, see **TESTING.md**
 
 ### Step-by-Step Testing Process
 
