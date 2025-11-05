@@ -47,9 +47,17 @@ pip3 install RPLCD --break-system-packages
 
 echo ""
 echo "Step 5: Creating dump directory..."
-mkdir -p /home/pi/dump
-chown pi:pi /home/pi/dump
-chmod 755 /home/pi/dump
+# Detect the actual user (not root)
+ACTUAL_USER="${SUDO_USER:-$USER}"
+if [ "$ACTUAL_USER" = "root" ]; then
+    ACTUAL_USER="pi"
+fi
+USER_HOME=$(eval echo ~$ACTUAL_USER)
+
+mkdir -p "$USER_HOME/dump"
+chown $ACTUAL_USER:$ACTUAL_USER "$USER_HOME/dump"
+chmod 755 "$USER_HOME/dump"
+echo "Created dump directory: $USER_HOME/dump"
 
 echo ""
 echo "Step 6: Enabling I2C for LCD..."

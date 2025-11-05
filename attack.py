@@ -27,6 +27,7 @@ import datetime
 import os
 import time
 import re
+import pwd
 #import pprint
 import _thread
 
@@ -390,7 +391,14 @@ if(os.geteuid() != 0):
 # Configuration Variables
 # ============================================================================
 dump_prefix = "dump"              # Prefix for airodump-ng output files
-dump_dir = "/home/pi/dump"        # Directory to store scan results (must exist!)
+
+# Detect actual user home directory (handles sudo correctly)
+if 'SUDO_USER' in os.environ:
+    actual_user = os.environ['SUDO_USER']
+    dump_dir = pwd.getpwnam(actual_user).pw_dir + "/dump"
+else:
+    dump_dir = os.path.expanduser("~/dump")
+
 deauth_num_pkts = 100             # Number of deauth packets to send per attack
 iface = "wlan1"                   # Wireless interface in monitor mode (usually external adapter)
 deauth_max_seconds = 30           # Time between scans (unused in current implementation)

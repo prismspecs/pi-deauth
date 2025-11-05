@@ -81,40 +81,17 @@ Your Pi's built-in WiFi cannot do monitor mode. You need an external USB WiFi ad
 - Alfa AWUS036NH (RTL8187)
 - Any adapter with RT3070, RT5370, or Atheros AR9271 chipset
 
-### Automated Installation (Recommended)
-
-Run the installation script to install everything automatically:
+### Quick Install
 
 ```bash
-cd /path/to/wifi-deauth-rpi-wardrive
 sudo bash install.sh
-```
-
-This will install:
-- aircrack-ng suite (airodump-ng, aireplay-ng, airmon-ng)
-- Python dependencies (RPLCD for LCD)
-- WiFi adapter firmware (Ralink, Realtek, Atheros)
-- Create dump directory
-- Configure I2C for LCD
-
-After installation:
-```bash
 sudo reboot
-```
-
-Then verify:
-```bash
-# Check for WiFi adapters
-iwconfig
-# Should show wlan0 (built-in) and wlan1 (external adapter)
-
-# Run test
 sudo bash test_setup.sh
 ```
 
-### Manual Installation
+The install script handles everything: aircrack-ng, Python packages, WiFi firmware, and directory setup.
 
-If you prefer to install manually:
+### Manual Installation (Optional)
 
 ### 1. Install System Dependencies
 
@@ -313,15 +290,13 @@ When the LCD is connected, you'll see real-time status updates:
 |------|---------|
 | `attack.py` | Main attack script - scans, parses, and deauths with LCD support |
 | `lcd_display.py` | LCD control module for 16x2 I2C displays |
-| `install.sh` | Automated installation script - installs all dependencies |
-| `test_setup.sh` | Automated test script to verify hardware and software setup |
+| `install.sh` | Installation script - installs all dependencies |
+| `test_setup.sh` | Test script to verify hardware and software |
 | `startup.sh` | Auto-run on boot - connects to hotspot |
 | `wifi-connect.sh` | Helper script for wpa_supplicant |
 | `wpa_supplicant_hotspot.conf` | WiFi credentials for SSH access |
-| `requirements.txt` | Python dependencies (RPLCD) |
-| `README.md` | Main documentation (this file) |
-| `TESTING.md` | Detailed testing procedures and troubleshooting |
-| `SETUP_GUIDE.md` | Quick setup guide for Raspberry Pi 5 |
+| `requirements.txt` | Python dependencies |
+| `README.md` | Documentation (this file) |
 
 ## Troubleshooting
 
@@ -365,21 +340,17 @@ If you're targeting a specific network (e.g., "eduroam") and it shows "Not Found
 - Try scanning manually: `sudo airodump-ng wlan1` to see available networks
 - Set `target_essid = None` to test with any network
 
-## Testing Instructions
+## Testing
 
-### Automated Testing (Recommended)
-
-Run the automated test script to verify your setup:
+Run the automated test script:
 
 ```bash
 sudo bash test_setup.sh
 ```
 
-This will check all hardware, software, and configuration automatically.
+This checks all hardware, software, and configuration.
 
-For detailed testing procedures, see **TESTING.md**
-
-### Step-by-Step Testing Process
+### Manual Testing
 
 **1. Verify WiFi Adapter Detection**
 ```bash
