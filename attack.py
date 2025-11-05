@@ -412,8 +412,8 @@ deauth_max_seconds = 30           # Time between scans (unused in current implem
 # Target Configuration
 # Set to a specific network name (e.g., "eduroam") to target only that network
 # Set to None to target all networks
-target_essid = "eduroam"          # Target network name (case-insensitive)
-                                   # Change to None to attack all networks
+target_essid = None               # None = attack all networks found
+                                   # Or set to "eduroam" for specific network
 
 # Attack Mode
 # Set to True to attack all found networks/APs in sequence
