@@ -50,6 +50,10 @@ except ImportError:
 # This minimizes channel hopping for better performance
 current_channel = -1
 
+# Track which networks we've already warned about MFP
+# Prevents repeated warnings for the same network
+warned_networks = set()
+
 def hop_channel(interface, channel):
 	"""
 	Change the wireless interface to operate on a specific WiFi channel.
@@ -74,6 +78,59 @@ def hop_channel(interface, channel):
 	print("Hopped to channel", channel)
 
 
+def check_mfp_warning(essid):
+	"""
+	Check if the target network likely has MFP enabled and warn the user.
+	
+	Enterprise networks and certain common network names typically have 802.11w
+	Management Frame Protection enabled, which prevents deauth attacks.
+	Only warns once per network per session.
+	
+	Args:
+		essid (str): Network name (ESSID) to check
+	
+	Returns:
+		bool: True if likely protected, False otherwise
+	"""
+	global warned_networks
+	
+	# Skip if we've already warned about this network
+	if essid in warned_networks:
+		return False
+	
+	# Common enterprise network names that typically have MFP
+	enterprise_networks = [
+		'eduroam', 'enterprise', 'corporate', 'corp',
+		'securewifi', 'wpa3', 'university', 'college',
+		'school', 'campus', 'office', 'work'
+	]
+	
+	essid_lower = essid.lower()
+	for network in enterprise_networks:
+		if network in essid_lower:
+			# Mark as warned
+			warned_networks.add(essid)
+			
+			print(f"\n{'='*60}")
+			print(f"WARNING: '{essid}' appears to be an enterprise network!")
+			print(f"{'='*60}")
+			print("Enterprise networks typically have 802.11w MFP enabled,")
+			print("which PROTECTS against deauth attacks.")
+			print("")
+			print("If the attack doesn't work:")
+			print("  - This is NORMAL for enterprise/educational networks")
+			print("  - MFP cryptographically protects management frames")
+			print("  - Clients will IGNORE your spoofed deauth packets")
+			print("")
+			print("This attack works on:")
+			print("  - Home routers (most don't have MFP)")
+			print("  - Older networks without MFP support")
+			print(f"{'='*60}\n")
+			return True
+	
+	return False
+
+
 def deauth(interface, num_pkts_to_send, ap_mac, ap_channel, ap_essid):
 	"""
 	Send deauthentication packets to disconnect clients from an access point.
@@ -93,6 +150,9 @@ def deauth(interface, num_pkts_to_send, ap_mac, ap_channel, ap_essid):
 	"""
 	global current_channel
 	try:
+		# Warn if this is likely an enterprise network with MFP
+		check_mfp_warning(ap_essid)
+		
 		# Hop to the correct channel if needed
 		if current_channel != ap_channel:
 			hop_channel(interface, ap_channel)

@@ -320,6 +320,65 @@ When the LCD is connected, you'll see real-time status updates:
 | `requirements.txt` | Python dependencies |
 | `README.md` | Documentation (this file) |
 
+## Known Limitations
+
+### 802.11w Management Frame Protection (MFP)
+
+**The attack will NOT work on networks with MFP/PMF enabled.**
+
+**What is MFP?**
+- 802.11w is a WiFi security standard that protects management frames (including deauth packets)
+- Management frames are cryptographically signed and verified
+- Prevents spoofing of deauth/disassociation frames
+
+**Which networks have MFP?**
+
+**PROTECTED (Attack will FAIL):**
+- Enterprise networks: eduroam, corporate WiFi, university networks
+- WPA3 networks (MFP is mandatory)
+- Modern WPA2-Enterprise deployments
+- Any network with "Protected Management Frames" enabled
+
+**VULNERABLE (Attack will WORK):**
+- Most home routers with WPA2-Personal
+- Older routers without MFP support
+- Networks with MFP disabled
+
+**How to tell if MFP is enabled:**
+```bash
+# Scan for network details
+sudo airodump-ng wlan1mon
+
+# Look for networks - if they have WPA3 or are enterprise, they likely have MFP
+# Home routers typically show WPA2 without MFP
+```
+
+**Why does it work on home routers but not eduroam?**
+
+Your home router likely has MFP disabled (default on most consumer routers). Enterprise networks like eduroam **require** MFP for security compliance. When you send deauth packets:
+
+- **Home router**: Clients accept the spoofed deauth frames and disconnect
+- **eduroam**: Clients verify the signature, detect it's invalid, and **ignore** the deauth frames
+
+**Bottom line:** This tool is effective against home networks and older infrastructure, but modern enterprise/educational networks are protected against this attack.
+
+### Other Limitations
+
+**Single Channel Operation:**
+- A WiFi adapter can only be on ONE channel at a time
+- Cannot attack networks on different channels simultaneously
+- Sequential attacks work (hop between channels)
+
+**Range:**
+- Effective range depends on your WiFi adapter's transmit power
+- Typically 30-100 feet for most USB adapters
+- Alfa adapters have better range (100-300 feet)
+
+**Detection:**
+- Deauth attacks can be detected by wireless intrusion detection systems (WIDS)
+- Network administrators may see "excessive deauth frames" in logs
+- Some enterprise systems automatically alert on deauth attacks
+
 ## Troubleshooting
 
 ### Monitor mode not working
