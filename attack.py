@@ -275,13 +275,8 @@ def airodump(interface, dump_dir, dump_prefix):
 	# Don't use sudo if we're already root
 	cmd = ["airodump-ng", interface, "-w", output_path, "--output-format", "csv"]
 	
-	print(f"\nDEBUG: Running command: {' '.join(cmd)}")
-	print(f"DEBUG: Output path: {output_path}")
-	print(f"DEBUG: Expected file: {output_path}-01.csv")
-	
 	# Start airodump-ng
 	proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-	print(f"DEBUG: Process started with PID {proc.pid}")
 	print("airodump-ng process started")
 
 def killall_airodump():
@@ -533,13 +528,11 @@ while True:
 		
 		# Step 2: Wait for airodump to collect enough data
 		# 10 seconds allows it to scan multiple channels and detect APs
-		print("Waiting 10 seconds for scan...")
 		if LCD_AVAILABLE:
 			display_status("Scanning", "10 seconds...")
 		time.sleep(10)
 		
 		# Step 3: Stop airodump so we can read the CSV file
-		print("Stopping airodump-ng...")
 		if LCD_AVAILABLE:
 			display_status("Stopping", "Scanner...")
 		killall_airodump()
@@ -547,27 +540,17 @@ while True:
 		# Step 4: Find the most recent CSV file created by airodump
 		if LCD_AVAILABLE:
 			display_status("Reading", "Scan Data...")
-		print("Getting latest dump file from:", dump_dir)
-		
-		# List files in dump directory for debugging
-		try:
-			files = os.listdir(dump_dir)
-			print(f"Files in {dump_dir}: {files}")
-		except Exception as e:
-			print(f"Error listing directory: {e}")
 		
 		latest_dump_csv_file_name = get_latest_csv(dump_dir, dump_prefix)
 		print("Latest dump:", latest_dump_csv_file_name)
 
 		# Validate that we found a CSV file
 		if(not latest_dump_csv_file_name):
-			print("ERROR: No CSV file found!")
-			print(f"Check that airodump-ng can write to: {dump_dir}")
-			print("Try running manually: sudo airodump-ng wlan1 -w ~/dump/test --output-format csv")
+			print("WARNING: No CSV file found, retrying...")
 			if LCD_AVAILABLE:
 				display_status("Error", "No CSV File")
 			time.sleep(3)
-			continue  # Try again instead of exiting
+			continue
 
 		# Step 5: Execute deauth attack on the target AP(s)
 		# This reads the CSV, selects target(s), and sends deauth packets
